@@ -1,7 +1,8 @@
 """Play-test bot for Spooky House Rescue.
 1) Follows the game's own hints from start to finish at every level (wrong answer first, then right).
 2) Random-tap runs: many random taps and answers, then follows hints; the game must still be winnable.
-3) Real clicks on the canvas walk the characters and trigger things.  4) Save and continue.
+3) Sound: every tune lines up, each room plays its music, taps make sounds.
+4) Real clicks on the canvas walk the characters and trigger things.  5) Save and continue.
 Usage: python3 tests/run.py [chrome path]"""
 import sys, os, glob
 from playwright.sync_api import sync_playwright
@@ -43,6 +44,12 @@ with sync_playwright() as pw:
             pg.evaluate("for(const k in __SH.s) 0")
         bank=pg.evaluate("m=>__SH.QUIZ[m].every(q=>q.length>=4&&new Set(q.slice(1,4)).size===3)",mode)
         check('question bank '+mode, bank)
+    check('every tune: voices are the same length', pg.evaluate("Object.values(__SH.TRACKS).every(tr=>new Set(tr.v.map(v=>v[2].reduce((a,n)=>a+n[1],0))).size===1)"))
+    check('win music plays at the end', pg.evaluate("__SH.music")=='win')
+    pg.evaluate("__SH.begin(__SH.fresh('k','little'))"); check('yard music', pg.evaluate("__SH.music")=='title')
+    n0=pg.evaluate("__SH.sfxCount"); pg.evaluate("__SH.act('owl')"); check('tapping the owl makes a sound', pg.evaluate("__SH.sfxCount")==n0+1)
+    seen=pg.evaluate("""(()=>{ const A=__SH, m={}; let n=0; while(!A.s.won&&n++<400){ const h=A.hint(); if(h.inv){ A.hold(h.inv); continue; } A.act(h.id); ansRight(false); m[A.s.room]=A.music; } return m; })()""")
+    check('each room has its music', seen.get('hall')=='sneak' and seen.get('cellar')=='creep' and seen.get('bedroom')=='tiptoe' and seen.get('attic')=='win', seen)
     bad=[]
     for mode in ['little','kid','adult']:
         for seed in range(1,61):

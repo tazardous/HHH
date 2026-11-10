@@ -65,7 +65,7 @@ button:active{transform:translateY(2px)}
 @media (max-height:480px){
   .card{gap:6px} .card h2{font-size:1.6rem} #title .card>p:first-of-type{display:none} .card p{font-size:.95rem} .pick small{display:none} .go{font-size:1.1rem;padding:6px 22px}
   body{gap:5px;padding-block:5px}
-  #bar h1{font-size:1.1rem} #bar button{min-height:32px;padding:2px 10px;font-size:.9rem}
+  #bar h1{display:none} #bar button{min-height:32px;padding:2px 10px;font-size:.9rem}
   #low{flex-direction:row} #talk{flex:1;font-size:.95rem;min-height:0} #bag{flex:none;max-width:50%;min-height:0}
   #bag button{width:44px;height:44px} #bag canvas{width:36px;height:36px} #bag .lab{display:none}
 }
@@ -78,6 +78,7 @@ button:active{transform:translateY(2px)}
   <span id="where"></span>
   <span id="stars"></span>
   <button id="bHint" type="button">Hint</button>
+  <button id="bSound" type="button">Sound: on</button>
   <button id="bVoice" type="button">Voice: on</button>
   <button id="bHome" type="button">Home</button>
 </div>
@@ -143,11 +144,61 @@ function persist(){ try{ localStorage.setItem(SAVE,JSON.stringify({s,voiceOn}));
 function loadSave(){ try{ const d=JSON.parse(localStorage.getItem(SAVE)||'null'); if(d&&d.s&&ROOMS[d.s.room]) return d; }catch(e){} return null; }
 
 /* ---------- sound and voice ---------- */
-let ac=null;
-function beep(notes){ try{ ac=ac||new (window.AudioContext||window.webkitAudioContext)(); let at=ac.currentTime;
-  for(const n of notes){ const o=ac.createOscillator(), v=ac.createGain(); o.type='triangle'; o.frequency.value=n; v.gain.setValueAtTime(.12,at); v.gain.exponentialRampToValueAtTime(.001,at+.18); o.connect(v); v.connect(ac.destination); o.start(at); o.stop(at+.2); at+=.11; } }catch(e){} }
+/* All sounds are made here with simple beeps, like a 1990 PC. The tunes are original, written for this game. */
+let ac=null, soundOn=true, sfxG=null, musG=null, noiseBuf=null, sfxCount=0;
+function audio(){ if(ac) return ac; try{ ac=new (window.AudioContext||window.webkitAudioContext)(); sfxG=ac.createGain(); sfxG.gain.value=.55; sfxG.connect(ac.destination); musG=ac.createGain(); musG.gain.value=.5; musG.connect(ac.destination);
+  noiseBuf=ac.createBuffer(1,ac.sampleRate,ac.sampleRate); const d=noiseBuf.getChannelData(0); for(let k=0;k<d.length;k++) d[k]=Math.random()*2-1; }catch(e){ ac=null; } return ac; }
+function tone(o){ if(!soundOn||!audio()) return; try{ const at=o.t||ac.currentTime+(o.at||0), d=o.d||.15, os=ac.createOscillator(), v=ac.createGain(); os.type=o.type||'square'; os.frequency.setValueAtTime(o.f,at); if(o.f2) os.frequency.exponentialRampToValueAtTime(o.f2,at+d);
+  if(o.vib){ const l=ac.createOscillator(), lg=ac.createGain(); l.frequency.value=o.vib; lg.gain.value=o.f*.05; l.connect(lg); lg.connect(os.frequency); l.start(at); l.stop(at+d+.05); }
+  v.gain.setValueAtTime(.0001,at); v.gain.linearRampToValueAtTime(o.v||.1,at+.012); v.gain.exponentialRampToValueAtTime(.0001,at+d); os.connect(v); v.connect(o.out||sfxG); os.start(at); os.stop(at+d+.05); }catch(e){} }
+function noise(o){ if(!soundOn||!audio()) return; try{ const at=ac.currentTime+(o.at||0), d=o.d||.1, src=ac.createBufferSource(), bp=ac.createBiquadFilter(), v=ac.createGain(); src.buffer=noiseBuf; bp.type='bandpass'; bp.frequency.value=o.f; bp.Q.value=1.2;
+  v.gain.setValueAtTime(o.v||.2,at); v.gain.exponentialRampToValueAtTime(.0001,at+d); src.connect(bp); bp.connect(v); v.connect(sfxG); src.start(at); src.stop(at+d+.05); }catch(e){} }
+function beep(notes){ notes.forEach((f,k)=>tone({f,d:.16,v:.07,at:k*.1})); }
+const SFX={
+ door(){ tone({type:'sawtooth',f:70,f2:150,d:.5,v:.07,vib:11}); noise({f:300,d:.09,v:.3,at:.5}); },
+ lock(){ noise({f:2500,d:.04,v:.3}); tone({f:1200,d:.05,v:.06,at:.07}); },
+ step(){ noise({f:170,d:.05,v:.1}); },
+ owl(){ tone({type:'sine',f:420,f2:380,d:.22,v:.2}); tone({type:'sine',f:420,f2:340,d:.42,v:.2,at:.3}); },
+ ghost(){ tone({type:'sine',f:480,f2:800,d:.45,v:.13,vib:7}); tone({type:'sine',f:800,f2:420,d:.6,v:.13,vib:7,at:.45}); },
+ ghost2(){ tone({type:'sine',f:800,f2:1300,d:.3,v:.1,vib:9}); tone({type:'sine',f:1300,f2:900,d:.35,v:.1,vib:9,at:.3}); },
+ squeak(){ tone({f:2200,f2:3000,d:.07,v:.05}); tone({f:2400,f2:3200,d:.07,v:.05,at:.13}); },
+ purr(){ for(let k=0;k<12;k++) tone({type:'sawtooth',f:58,d:.06,v:.1,at:k*.07}); },
+ spider(){ for(let k=0;k<8;k++) tone({type:'triangle',f:900+k*90,d:.04,v:.1,at:k*.05}); },
+ clank(){ tone({f:523,d:.25,v:.05}); tone({f:789,d:.2,v:.05}); tone({f:1217,d:.12,v:.04}); noise({f:4000,d:.05,v:.2}); },
+ boing(){ tone({type:'sine',f:180,f2:700,d:.18,v:.2}); tone({type:'sine',f:700,f2:260,d:.3,v:.16,at:.18,vib:18}); },
+ monster(){ tone({type:'sawtooth',f:110,f2:80,d:.35,v:.1,vib:14}); tone({type:'sawtooth',f:140,f2:100,d:.3,v:.1,vib:14,at:.32}); },
+ bark(){ for(let k=0;k<2;k++){ tone({type:'sawtooth',f:520,f2:260,d:.12,v:.14,at:k*.22}); noise({f:900,d:.08,v:.15,at:k*.22}); } },
+ rumble(){ noise({f:90,d:1,v:.5}); tone({type:'sawtooth',f:50,f2:40,d:1,v:.1,vib:9}); }
+};
+const WHO_SFX={'Owl':'owl','Boo the ghost':'ghost','Baby ghost':'ghost2','Mouse':'squeak','Fuzzy':'monster','Fuzzy under the bed':'monster'};
+function sfx(n){ sfxCount++; if(SFX[n]) SFX[n](); }
+/* music: each voice is a list of notes, one step long unless marked like A4:2. "-" is a rest. */
+const NOTE={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+const tune=str=>str.split(' ').map(k=>{ const [n,l]=k.split(':'), len=+(l||1); if(n==='-') return [0,len]; const m=/^([A-G])(#?)(\d)$/.exec(n); return [440*Math.pow(2,(NOTE[m[1]]+(m[2]?1:0)+(m[3]-4)*12-9)/12),len]; });
+const TRACKS={
+ title:{u:.2,v:[['square',.04,tune('A4 C5 E5 C5 A4 C5 E5 - G#4 B4 E5 B4 G#4 B4 E5 - A4 C5 E5 A5 G5 E5 C5 E5 D5 F5 E5 D5 C5 B4 A4 - F4 A4 C5 A4 F4 A4 C5 - E4 G#4 B4 G#4 E4 G#4 B4 - A4 B4 C5 D5 E5 F5 E5 D5 C5 A4 B4 G#4 A4:2 -:2')],
+   ['triangle',.09,tune('A2:2 E3:2 A2:2 E3:2 E2:2 B2:2 E2:2 B2:2 A2:2 E3:2 C3:2 E3:2 D3:2 E3:2 A2:2 E2:2 F2:2 C3:2 F2:2 C3:2 E2:2 B2:2 E2:2 B2:2 A2:2 C3:2 D3:2 E3:2 A2:2 E2:2 A2:4')]]},
+ sneak:{u:.27,st:.55,v:[['square',.035,tune('D4 - F4 - A4 - G#4 - A4 F4 D4 - C#4:2 -:2 D4 - F4 - A4 - A#4 - A4 G4 F4 E4 D4:2 -:2')],
+   ['triangle',.09,tune('D3:4 -:4 A2:4 -:4 D3:4 -:4 A2:2 C#3:2 D3:4')]]},
+ creep:{u:.36,v:[['triangle',.11,tune('E3:2 G3:2 F#3:4 E3:2 A#3:2 A3:4 E3:2 G3:2 B3:2 A#3:2 A3:2 F#3:2 E3:4')],
+   ['square',.02,tune('-:6 B5 E6 -:6 A#5 E6 -:6 B5 G6 -:4 E6:2 -:2')]]},
+ tiptoe:{u:.24,st:.6,v:[['square',.035,tune('D5 - A#4 - G4 - A#4 - D5 D5 C5 A#4 A4:2 -:2 C5 - A4 - F#4 - A4 - C5 C5 A#4 A4 G4:2 -:2')],
+   ['triangle',.09,tune('G2:2 D3:2 G2:2 D3:2 G2:2 D3:2 D3:2 D2:2 D2:2 A2:2 D2:2 A2:2 D2:2 A2:2 G2:2 G2:2')]]},
+ win:{u:.17,v:[['square',.04,tune('C5 E5 G5 C6 G5 E5 G5 - A4 C5 F5 A5 F5 C5 F5 - G4 B4 D5 G5 D5 B4 D5 - C5 E5 G5 E5 C5:2 -:2')],
+   ['triangle',.09,tune('C3:2 G3:2 C3:2 G3:2 F2:2 C3:2 F2:2 C3:2 G2:2 D3:2 G2:2 D3:2 C3:2 G2:2 C3:4')]]}
+};
+const MUSIC={yard:'title',hall:'sneak',kitchen:'sneak',library:'sneak',cellar:'creep',upstairs:'tiptoe',bedroom:'tiptoe',attic:'tiptoe'};
+const mus={name:null,pos:[],next:[]};
+function setMusic(name){ if(mus.name===name||!TRACKS[name]) return; mus.name=name; mus.pos=TRACKS[name].v.map(()=>0); mus.next=TRACKS[name].v.map(()=>0); }
+function pump(){ if(!ac||!soundOn||!mus.name||ac.state!=='running') return; const tr=TRACKS[mus.name], now=ac.currentTime;
+  if(mus.next.some(x=>x<now-.25)){ mus.pos=tr.v.map(()=>0); mus.next=tr.v.map(()=>now+.1); }
+  tr.v.forEach((vc,k)=>{ while(mus.next[k]<now+.35){ const [f,len]=vc[2][mus.pos[k]]; if(f) tone({type:vc[0],f,d:len*tr.u*(tr.st||.9),v:vc[1],t:mus.next[k],out:musG}); mus.next[k]+=len*tr.u; mus.pos[k]=(mus.pos[k]+1)%vc[2].length; } }); }
+setInterval(pump,100);
+function wake(){ if(soundOn&&audio()&&ac.state==='suspended') ac.resume().catch(()=>{}); }
+addEventListener('pointerdown',wake,true); addEventListener('keydown',wake,true);
+document.addEventListener('visibilitychange',()=>{ if(!ac) return; if(document.hidden){ ac.suspend().catch(()=>{}); try{ speechSynthesis.cancel(); }catch(e){} } else wake(); });
 function speak(txt){ if(!voiceOn) return; try{ const ss=window.speechSynthesis; if(!ss) return; ss.cancel(); const u=new SpeechSynthesisUtterance(txt); u.rate=.9; u.pitch=1.15; u.lang='en-US'; ss.speak(u); }catch(e){} }
-function say(txt,who){ const el=$('talk'); el.textContent=''; if(who){ const b=document.createElement('b'); b.textContent=who+':'; el.appendChild(b); } el.appendChild(document.createTextNode(txt)); speak(txt); }
+function say(txt,who){ if(WHO_SFX[who]) sfx(WHO_SFX[who]); const el=$('talk'); el.textContent=''; if(who){ const b=document.createElement('b'); b.textContent=who+':'; el.appendChild(b); } el.appendChild(document.createTextNode(txt)); speak(txt); }
 
 /* ---------- items ---------- */
 function star(){ s.stars++; beep([660,880,1100]); for(let i=0;i<14;i++) fx.push({x:p.x,y:FEET-90,vx:(Math.random()-.5)*260,vy:-Math.random()*260-60,life:1,c:['#fff3c4','#ff8a3c','#9be870'][i%3]}); }
@@ -156,7 +207,7 @@ function take(i){ s.inv=s.inv.filter(x=>x!==i); if(s.held===i) s.held=null; }
 /* true = use it now, false = you do not have it, null = you have it but have not picked it (Kid and Grown-up levels) */
 function use(i){ if(!has(i)) return false; if(s.mode==='little'||s.held===i) return true;
   say(s.held?'That does not work here. Try something else from your bag.':'Pick something from your bag, then tap here again.'); return null; }
-function go(to,at){ s.room=to; p.x=at; fol.x=at-40; target=null; pending=null; fade=1; beep([330,440]); $('where').textContent=ROOMS[to].name; say(ROOMS[to].hello); }
+function go(to,at){ s.room=to; p.x=at; fol.x=at-40; target=null; pending=null; fade=1; sfx('door'); setMusic(MUSIC[to]); $('where').textContent=ROOMS[to].name; say(ROOMS[to].hello); }
 
 /* ---------- rooms: what you can tap ---------- */
 const ROOMS={
@@ -165,7 +216,7 @@ const ROOMS={
   {id:'mailbox',r:[345,300,80,130],tap(){ say('A note in the mailbox says: Come in and play! Love, Boo the ghost.'); }},
   {id:'pot',r:[550,340,85,95],wx:560,tap(){ if(!s.f.key1){ s.f.key1=1; give('goldkey','You found a gold key under the flowerpot!'); } else say('What a pretty flower.'); }},
   {id:'door',r:[650,280,100,145],wx:700,to:'hall',at:150,open:()=>s.f.doorOpen,tap(){ const u=use('goldkey'); if(u===null) return;
-     if(u) ask('door','The door knocker',()=>{ take('goldkey'); s.f.doorOpen=1; star(); say('Click! The door is open. Tap the door to go inside.'); }); else say('The door is locked. Is a key hiding in the yard?'); }}
+     if(u) ask('door','The door knocker',()=>{ take('goldkey'); s.f.doorOpen=1; star(); sfx('lock'); say('Click! The door is open. Tap the door to go inside.'); }); else say('The door is locked. Is a key hiding in the yard?'); }}
  ]},
  hall:{name:'Hall',hello:'The big hall. Doors go to the kitchen and the library.',hs:[
   {id:'out',r:[0,320,74,150],wx:50,to:'yard',at:700},
@@ -181,7 +232,7 @@ const ROOMS={
  kitchen:{name:'Kitchen',hello:'The kitchen. Something smells yummy.',hs:[
   {id:'out',r:[0,320,74,150],wx:50,to:'hall',at:165},
   {id:'fridge',r:[145,175,110,230],wx:270,tap(){ if(!s.f.cheese) ask('fridge','The fridge magnets',()=>{ s.f.cheese=1; give('cheese','You found cheese in the fridge!'); }); else say('Brrr! Only ice in there now.'); }},
-  {id:'cat',r:[295,255,90,70],wx:340,tap(){ say('Purr, purr. The kitty is sleepy.'); }},
+  {id:'cat',r:[295,255,90,70],wx:340,tap(){ sfx('purr'); say('Purr, purr. The kitty is sleepy.'); }},
   {id:'jar',r:[440,60,140,115],wx:455,tap(){ if(s.f.cookie){ say('The cookie jar is empty now.'); return; } const u=use('stool'); if(u===null) return;
      if(u){ take('stool'); s.f.stoolPlaced=1; s.f.cookie=1; give('cookie','You climbed up on the stool and got a cookie!'); } else say('The cookie jar is too high! You need something to stand on.'); }},
   {id:'cellar',r:[755,190,110,215],wx:810,to:'cellar',at:230,open:()=>has('lantern'),tap(){ say('It is too dark down there! You need a light.'); }}
@@ -191,7 +242,7 @@ const ROOMS={
   {id:'stool',r:[90,335,90,80],wx:190,show:()=>!s.f.stool,tap(){ s.f.stool=1; give('stool','You took the stool. You can stand on it to reach high things.'); }},
   ...BOOKS.map(([c,,x])=>({id:'book_'+c,r:[x-4,215,58,105],wx:250,tap(){ if(s.f.secretOpen){ say('The books are happy now.'); return; }
      if(c===ORDER[s.seq]){ s.seq++; wave['book_'+c]=t; beep([440+s.seq*110]);
-       if(s.seq===3){ s.f.secretOpen=1; star(); say('Rumble, rumble! A secret cupboard opened!'); } else say('The '+c+' book! What comes next?'); }
+       if(s.seq===3){ s.f.secretOpen=1; star(); sfx('rumble'); say('Rumble, rumble! A secret cupboard opened!'); } else say('The '+c+' book! What comes next?'); }
      else { s.seq=0; beep([200,160]); say('Oops! The books wiggle back. The painting in the hall shows the right order.'); } }})),
   {id:'cupboard',r:[750,240,120,165],wx:730,show:()=>s.f.secretOpen,tap(){ if(!s.f.teddy) ask('cupboard','The secret cupboard',()=>{ s.f.teddy=1; give('teddy','You found a teddy bear in the secret cupboard!'); }); else say('The cupboard is empty now.'); }}
  ]},
@@ -200,29 +251,29 @@ const ROOMS={
   {id:'barrel',r:[290,285,120,130],wx:430,tap(){ if(!s.f.bone){ s.f.bone=1; give('bone','You found a bone in the barrel! Bernie loves bones.'); } else say('Just pickles in there. Yuck!'); }},
   {id:'mouse',r:[580,325,120,95],wx:560,tap(){ if(s.f.starkey){ say('Squeak! Munch, munch, munch.','Mouse'); return; } const u=use('cheese'); if(u===null) return;
      if(u) ask('mouse','The mouse',()=>{ take('cheese'); s.f.starkey=1; give('starkey','Squeak! Thank you! The mouse gave you a star key!'); }); else say('Squeak! I am hungry for cheese!','Mouse'); }},
-  {id:'spider',r:[735,50,130,160],wx:800,tap(){ wave.spider=t; say('The spider waves all eight legs. Hello!'); }}
+  {id:'spider',r:[735,50,130,160],wx:800,tap(){ wave.spider=t; sfx('spider'); say('The spider waves all eight legs. Hello!'); }}
  ]},
  upstairs:{name:'Upstairs',hello:'Upstairs. One door has two funny locks.',hs:[
   {id:'out',r:[0,320,74,150],wx:50,to:'hall',at:500},
   {id:'bdoor',r:[215,190,100,215],wx:265,to:'bedroom',at:150},
-  {id:'armor',r:[440,190,100,215],wx:400,tap(){ wave.armor=t; beep([300,300]); say('Clank! The knight waves hello.'); }},
+  {id:'armor',r:[440,190,100,215],wx:400,tap(){ wave.armor=t; sfx('clank'); say('Clank! The knight waves hello.'); }},
   {id:'attic',r:[695,170,110,235],wx:750,to:'attic',at:150,open:()=>s.f.aStar&&s.f.aMoon,tap(){ const fits=k=>has(k)&&(s.mode==='little'||s.held===k);
-     if(fits('starkey')||fits('moonkey')) ask('attic','The attic door',()=>{ for(const [k,fl] of [['starkey','aStar'],['moonkey','aMoon']]) if(!s.f[fl]&&fits(k)){ take(k); s.f[fl]=1; star(); }
+     if(fits('starkey')||fits('moonkey')) ask('attic','The attic door',()=>{ for(const [k,fl] of [['starkey','aStar'],['moonkey','aMoon']]) if(!s.f[fl]&&fits(k)){ take(k); s.f[fl]=1; star(); sfx('lock'); }
        say(s.f.aStar&&s.f.aMoon?'Both locks are open! Tap the door to go up to the attic.':'One lock is open! Now find the other key.'); });
      else if(has('starkey')||has('moonkey')) say(s.held?'That does not fit. Try a key from your bag.':'Pick a key from your bag, then tap the door again.');
      else say('The attic door has two locks, a star and a moon. You need two keys.'); }}
  ]},
  bedroom:{name:'Bedroom',hello:'A bedroom. Is someone under the bed?',hs:[
   {id:'out',r:[0,320,74,150],wx:50,to:'upstairs',at:265},
-  {id:'toybox',r:[140,300,120,110],wx:290,tap(){ wave.box=t; beep([520,780]); say('Boing! A jack-in-the-box pops up!'); }},
+  {id:'toybox',r:[140,300,120,110],wx:290,tap(){ wave.box=t; sfx('boing'); say('Boing! A jack-in-the-box pops up!'); }},
   {id:'monster',r:[370,270,340,150],wx:330,tap(){ if(s.f.moonkey){ wave.fuzzy=t; say('I love my teddy! Thank you!','Fuzzy'); return; } const u=use('teddy'); if(u===null) return;
      if(u) ask('monster','Fuzzy the monster',()=>{ take('teddy'); s.f.moonkey=1; give('moonkey','My teddy! Thank you! Fuzzy the monster gave you a moon key!'); }); else say('I lost my teddy bear! Boo hoo!','Fuzzy under the bed'); }}
  ]},
  attic:{name:'Attic',hello:'The attic! Is Bernie up here?',hs:[
   {id:'out',r:[0,320,74,150],wx:50,to:'upstairs',at:750},
   {id:'baby',r:[250,130,110,120],wx:300,tap(){ wave.baby=t; say(s.won?'Wheee! Bye bye, Bernie!':'Wheee! Bernie is hiding behind the trunk. He is shy.','Baby ghost'); }},
-  {id:'trunk',r:[540,270,200,150],wx:500,tap(){ if(s.won){ say('Woof woof! Bernie is so happy!'); return; } const u=use('bone'); if(u===null) return;
-     if(u) ask('trunk','The baby ghost',()=>{ take('bone'); s.won=true; star(); winAt=t+3; say('Bernie jumped out! Woof woof! You found him!'); beep([523,659,784,1047]); }); else say('Bernie is hiding behind the trunk. Maybe a treat will help him come out.'); }}
+  {id:'trunk',r:[540,270,200,150],wx:500,tap(){ if(s.won){ sfx('bark'); say('Woof woof! Bernie is so happy!'); return; } const u=use('bone'); if(u===null) return;
+     if(u) ask('trunk','The baby ghost',()=>{ take('bone'); s.won=true; star(); winAt=t+3; say('Bernie jumped out! Woof woof! You found him!'); sfx('bark'); setMusic('win'); }); else say('Bernie is hiding behind the trunk. Maybe a treat will help him come out.'); }}
  ]}
 };
 
@@ -290,7 +341,7 @@ function update(dt){ t+=dt; if(!s) return; if(fade>0) fade=Math.max(0,fade-dt*2.
   if(keys.ArrowLeft) target=Math.max(50,p.x-30); else if(keys.ArrowRight) target=Math.min(900,p.x+30);
   if(target!==null){ const dx=target-p.x, st=300*dt;
     if(Math.abs(dx)<=st){ p.x=target; target=null; if(pending){ const h=pending; pending=null; fire(h); } }
-    else { p.dir=dx>0?1:-1; p.x+=p.dir*st; p.ph+=dt*13; } } else p.ph=0;
+    else { const a=Math.floor(p.ph/Math.PI); p.dir=dx>0?1:-1; p.x+=p.dir*st; p.ph+=dt*13; if(Math.floor(p.ph/Math.PI)!==a) sfx('step'); } } else p.ph=0;
   const want=p.x-58*p.dir, fd=want-fol.x; if(Math.abs(fd)>4){ fol.dir=fd>0?1:-1; fol.x+=Math.sign(fd)*Math.min(Math.abs(fd),260*dt); fol.ph+=dt*13; } else { fol.ph=0; fol.dir=p.dir; }
   for(const q of fx){ q.x+=q.vx*dt; q.y+=q.vy*dt; q.vy+=500*dt; q.life-=dt; } fx=fx.filter(q=>q.life>0);
   if(s.won&&Math.random()<dt*14) fx.push({x:Math.random()*W,y:-10,vx:(Math.random()-.5)*60,vy:60+Math.random()*80,life:3,c:['#ff8a3c','#9be870','#fff3c4','#a56be0','#4a8df0'][Math.floor(Math.random()*5)]});
@@ -446,7 +497,7 @@ function draw(){ g.setTransform(2,0,0,2,0,0); if(!s){ const keep=s; s=fresh('k',
   if(fade>0){ g.fillStyle='rgba(18,12,36,'+fade+')'; g.fillRect(0,0,W,H); } }
 
 /* ---------- bar, bag, screens ---------- */
-function renderBar(){ $('stars').textContent='★ '+(s?s.stars:0)+' of '+TOTAL; $('where').textContent=s?ROOMS[s.room].name:''; $('bVoice').textContent='Voice: '+(voiceOn?'on':'off'); }
+function renderBar(){ $('stars').textContent='★ '+(s?s.stars:0)+' of '+TOTAL; $('where').textContent=s?ROOMS[s.room].name:''; $('bVoice').textContent='Voice: '+(voiceOn?'on':'off'); $('bSound').textContent='Sound: '+(soundOn?'on':'off'); }
 function renderBag(){ const bag=$('bag'); bag.textContent=''; const lab=document.createElement('span'); lab.className='lab'; lab.textContent='Bag'; bag.appendChild(lab);
   if(!s||!s.inv.length){ const n=document.createElement('span'); n.className='none'; n.textContent='Nothing yet. Tap things in the room to look for stuff.'; bag.appendChild(n); return; }
   const hi=(s.mode==='little'||t<hintUntil)?hint():null;
@@ -456,9 +507,9 @@ function renderBag(){ const bag=$('bag'); bag.textContent=''; const lab=document
     b.onclick=()=>{ s.held=s.held===i?null:i; beep([520]); say(s.held?'You are holding the '+ITEMS[i]+'. Now tap where you want to use it.':'You put the '+ITEMS[i]+' back in your bag.'); renderBag(); };
     bag.appendChild(b); } }
 function setPicks(){ $('whoK').classList.toggle('on',pickWho==='k'); $('whoD').classList.toggle('on',pickWho==='d'); $('modeL').classList.toggle('on',pickMode==='little'); $('modeK').classList.toggle('on',pickMode==='kid'); $('modeA').classList.toggle('on',pickMode==='adult'); }
-function begin(state){ s=state; p.x=s.room==='yard'&&!s.stars?100:p.x; fol.x=p.x-58; target=null; pending=null; fx=[]; winAt=0; $('title').hidden=true; $('win').hidden=true; $('quiz').hidden=true; quiz=null; renderBag(); renderBar();
+function begin(state){ s=state; p.x=s.room==='yard'&&!s.stars?100:p.x; fol.x=p.x-58; target=null; pending=null; fx=[]; winAt=0; $('title').hidden=true; $('win').hidden=true; $('quiz').hidden=true; quiz=null; setMusic(s.won?'win':MUSIC[s.room]); renderBag(); renderBar();
   say(s.stars?ROOMS[s.room].hello:'Oh no! Bernie the dog ran into the spooky house. Let us find him! Tap things to look around.'); persist(); }
-function showTitle(){ $('quiz').hidden=true; quiz=null; $('bCont').hidden=!(loadSave()&&!loadSave().s.won); setPicks(); $('title').hidden=false; try{ speechSynthesis.cancel(); }catch(e){} }
+function showTitle(){ $('quiz').hidden=true; quiz=null; setMusic('title'); $('bCont').hidden=!(loadSave()&&!loadSave().s.won); setPicks(); $('title').hidden=false; try{ speechSynthesis.cancel(); }catch(e){} }
 function showWin(){ $('winText').textContent='Great job, '+(s.who==='k'?'Kellan and Diana':'Diana and Kellan')+'! You got all '+s.stars+' stars, answered '+s.right+' questions, and made friends with everyone in the house.'; $('win').hidden=false; speak('Hooray! You found Bernie!'); persist(); }
 $('whoK').onclick=()=>{ pickWho='k'; setPicks(); }; $('whoD').onclick=()=>{ pickWho='d'; setPicks(); };
 $('modeL').onclick=()=>{ pickMode='little'; setPicks(); }; $('modeK').onclick=()=>{ pickMode='kid'; setPicks(); }; $('modeA').onclick=()=>{ pickMode='adult'; setPicks(); };
@@ -467,12 +518,14 @@ $('bCont').onclick=()=>{ const d=loadSave(); if(d){ p.x=200; begin(d.s); } };
 $('bAgain').onclick=()=>{ s=null; showTitle(); };
 $('bHome').onclick=()=>{ if(s) persist(); showTitle(); };
 $('bVoice').onclick=()=>{ voiceOn=!voiceOn; if(!voiceOn){ try{ speechSynthesis.cancel(); }catch(e){} } renderBar(); if(s) persist(); };
+$('bSound').onclick=()=>{ soundOn=!soundOn; if(soundOn){ wake(); beep([660,880]); } renderBar(); try{ localStorage.setItem(SAVE+'-sound',soundOn?'1':'0'); }catch(e){} };
 $('bHint').onclick=()=>{ if(!s||s.won) return; hintUntil=t+8; say(hintText(),'Hint'); renderBag(); };
 
 /* ---------- start ---------- */
+try{ soundOn=localStorage.getItem(SAVE+'-sound')!=='0'; }catch(e){}
 (function(){ const d=loadSave(); if(d){ voiceOn=d.voiceOn!==false; pickWho=d.s.who; pickMode=d.s.mode; } })();
 let last=0; function loop(ms){ const dt=Math.min(.05,(ms-last)/1000||0); last=ms; update(dt); draw(); requestAnimationFrame(loop); }
-window.__SH={get s(){return s;},ROOMS,p,hint,nextStep,update,draw,clickAt,act:id=>{ const h=hot(id); return h?fire(h):false; },begin,fresh,get quiz(){return quiz;},answer,QUIZ,hold:i=>{ s.held=i; },TOTAL};
+window.__SH={get s(){return s;},ROOMS,p,hint,nextStep,update,draw,clickAt,act:id=>{ const h=hot(id); return h?fire(h):false; },begin,fresh,get quiz(){return quiz;},get music(){return mus.name;},get sfxCount(){return sfxCount;},TRACKS,answer,QUIZ,hold:i=>{ s.held=i; },TOTAL};
 try{ window.claude?.hot?.snapshot?.(()=>({s,voiceOn})); }catch(e){}
 renderBar(); renderBag(); showTitle(); requestAnimationFrame(loop);
 if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!/claude/.test(location.hostname)) addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });

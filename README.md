@@ -12,6 +12,8 @@ A wrong answer just means try again. Questions and room messages are read aloud 
 
 Single-file HTML5 game: open `index.html`. Tap or click to walk and use things; arrow keys also walk. Installs on Android from Chrome (Install app) and then works with no internet.
 
+**Sound.** Beepy retro music and sound effects in the style of 1990 PC games, all original and made in the browser (no sound files): a title tune, sneaky music inside the house, creepy cellar music, a tiptoe tune upstairs and a happy tune when Bernie is found, plus door creaks, footsteps, ghost woos, an owl, a squeaky mouse, a purring cat and Bernie's bark. The Sound button turns it all off.
+
 ## Tests
 `python3 tests/run.py` plays the whole game at all three levels, does 180 random-tap runs to check the game can never get stuck, tries real taps, and checks saving. Add a Chrome path and a folder to also save screenshots: `python3 tests/run.py "" shots`.
 
