@@ -69,6 +69,15 @@ with sync_playwright() as pw:
     pg.reload(); pg.wait_for_timeout(400)
     check('Keep playing button appears', pg.is_visible('#bCont')); pg.click('#bCont'); pg.wait_for_timeout(200)
     check('save restored', pg.evaluate("__SH.s.room")=='hall' and pg.evaluate("__SH.s.stars")==2)
+    # finish the game, then use the real Play again and Start buttons
+    pg.evaluate(JS); pg.evaluate("__SH.begin(__SH.fresh('k','little'))"); pg.evaluate("follow('little',400,false)")
+    pg.wait_for_timeout(3600); check('win screen appears', pg.is_visible('#win'))
+    pg.click('#bAgain'); pg.wait_for_timeout(200)
+    check('Play again shows the title screen', pg.is_visible('#title') and not pg.is_visible('#win') and not pg.is_visible('#bCont'))
+    pg.click('#modeK'); pg.click('#bStart'); pg.wait_for_timeout(200)
+    st=pg.evaluate("[__SH.s.room,__SH.s.stars,__SH.s.won,__SH.s.inv.length,__SH.s.mode,__SH.music]")
+    check('Start begins a fresh game', st==['yard',0,False,0,'kid','title'] and not pg.is_visible('#title'), st)
+    click(590,385); check('the new game is playable', pg.evaluate("__SH.s.inv.includes('goldkey')"))
     check('no page errors', not errs, errs[:3])
     if len(sys.argv)>2:
         out=sys.argv[2]; os.makedirs(out,exist_ok=True); pg.evaluate(JS)

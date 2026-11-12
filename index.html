@@ -509,13 +509,13 @@ function renderBag(){ const bag=$('bag'); bag.textContent=''; const lab=document
 function setPicks(){ $('whoK').classList.toggle('on',pickWho==='k'); $('whoD').classList.toggle('on',pickWho==='d'); $('modeL').classList.toggle('on',pickMode==='little'); $('modeK').classList.toggle('on',pickMode==='kid'); $('modeA').classList.toggle('on',pickMode==='adult'); }
 function begin(state){ s=state; p.x=s.room==='yard'&&!s.stars?100:p.x; fol.x=p.x-58; target=null; pending=null; fx=[]; winAt=0; $('title').hidden=true; $('win').hidden=true; $('quiz').hidden=true; quiz=null; setMusic(s.won?'win':MUSIC[s.room]); renderBag(); renderBar();
   say(s.stars?ROOMS[s.room].hello:'Oh no! Bernie the dog ran into the spooky house. Let us find him! Tap things to look around.'); persist(); }
-function showTitle(){ $('quiz').hidden=true; quiz=null; setMusic('title'); $('bCont').hidden=!(loadSave()&&!loadSave().s.won); setPicks(); $('title').hidden=false; try{ speechSynthesis.cancel(); }catch(e){} }
+function showTitle(){ $('quiz').hidden=true; $('win').hidden=true; winAt=0; quiz=null; setMusic('title'); $('bCont').hidden=!(loadSave()&&!loadSave().s.won); setPicks(); $('title').hidden=false; try{ speechSynthesis.cancel(); }catch(e){} }
 function showWin(){ $('winText').textContent='Great job, '+(s.who==='k'?'Kellan and Diana':'Diana and Kellan')+'! You got all '+s.stars+' stars, answered '+s.right+' questions, and made friends with everyone in the house.'; $('win').hidden=false; speak('Hooray! You found Bernie!'); persist(); }
 $('whoK').onclick=()=>{ pickWho='k'; setPicks(); }; $('whoD').onclick=()=>{ pickWho='d'; setPicks(); };
 $('modeL').onclick=()=>{ pickMode='little'; setPicks(); }; $('modeK').onclick=()=>{ pickMode='kid'; setPicks(); }; $('modeA').onclick=()=>{ pickMode='adult'; setPicks(); };
 $('bStart').onclick=()=>{ p.x=100; begin(fresh(pickWho,pickMode)); };
 $('bCont').onclick=()=>{ const d=loadSave(); if(d){ p.x=200; begin(d.s); } };
-$('bAgain').onclick=()=>{ s=null; showTitle(); };
+$('bAgain').onclick=()=>{ s=null; fx=[]; renderBar(); renderBag(); say(''); showTitle(); };
 $('bHome').onclick=()=>{ if(s) persist(); showTitle(); };
 $('bVoice').onclick=()=>{ voiceOn=!voiceOn; if(!voiceOn){ try{ speechSynthesis.cancel(); }catch(e){} } renderBar(); if(s) persist(); };
 $('bSound').onclick=()=>{ soundOn=!soundOn; if(soundOn){ wake(); beep([660,880]); } renderBar(); try{ localStorage.setItem(SAVE+'-sound',soundOn?'1':'0'); }catch(e){} };
